@@ -1,3 +1,5 @@
+package DatabaseChat;
+
 import javafx.scene.control.ScrollPane;
 
 /**

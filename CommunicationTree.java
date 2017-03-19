@@ -1,3 +1,5 @@
+package DatabaseChat;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.Socket;
@@ -24,7 +26,7 @@ public class CommunicationTree implements Runnable{
     /**
      * Speichert alle <code>Node</code>.
      */
-    private static ArrayList<Node> nodes;
+    private static ArrayList<Node> nodes = new ArrayList<>();
     /**
      * Stellt das Root-<code>Node</code> dar, auf dieses wird referenziert, wenn ein angeforderter Key nicht existiert.
      *
@@ -42,7 +44,7 @@ public class CommunicationTree implements Runnable{
     /**
      * Diese <code>Thread</code> ließt Tasks aus der Netzwerkverbundung und speichert die Daten in einem <code>Task</code> ab.
      */
-    private Thread[] receiver;
+    private ArrayList<Thread> receiver;
 
     /**
      * Kontroliert, die Threads.
@@ -51,15 +53,12 @@ public class CommunicationTree implements Runnable{
     /**
      * Referenziert auf den <code>InputStream</code> des <code>Sockets connect</code>.
      */
-    private InputStream[] stream;
+    private CopyOnWriteArrayList<InputStream> stream;
     /**
      * Referenziert auf den <code>Socket</code> des <code>NetworkingPart sender</code>.
      */
-    private Socket[] connect;
-    /**
-     * Referenziert auf den <code>NetworkingPart</code>, welcher zum empfangen ausgewählt wurde.
-     */
-    private NetworkingPart[] network;
+    private CopyOnWriteArrayList<Socket> connect;
+
     /**
      * Stellt eine Multithreadingkompatible<code>ArrayList</code> dar.
      * Sie speichert alle <code>Tasks</code>.
@@ -70,62 +69,43 @@ public class CommunicationTree implements Runnable{
 
     /**
      * Initialisiert die Attribute
-     * @param part Instanz der Klasse <code>Sender</code>, mit der Netzwerkverbindung
+     * @param socket Instanz der Klasse <code>Sender</code>, mit der Netzwerkverbindung
      */
-    public CommunicationTree(NetworkingPart part){
-        nodes = new ArrayList<>();
+    public CommunicationTree(Socket socket){
         tasks = new CopyOnWriteArrayList<>();
         root = createNode("root", (bytes)->{});
         toRoot();
         executing = true;
         //Referenz auf die Netzwerkverbindungen
-        network = new NetworkingPart[1];
-        network[0] = part;
-        connect = new Socket[1];
-        connect[0] = network[0].getSocket();
+        connect = new CopyOnWriteArrayList<>();
+        connect.add(socket);
         try {
-            stream = new InputStream[1];
-            stream[0] = connect[0].getInputStream();
+            stream = new CopyOnWriteArrayList<>();
+            stream.add(socket.getInputStream());
         } catch (IOException e) {
             e.printStackTrace();
         }
+        receiver = new ArrayList<>();
     }
 
 
-    public CommunicationTree(NetworkingPart... part){
-        nodes = new ArrayList<>();
+    public CommunicationTree(Socket... sockets){
         tasks = new CopyOnWriteArrayList<>();
         root = createNode("root", (bytes)->{});
         toRoot();
         executing = true;
         //Referenz auf die Netzwerkverbindung
-        network = part;
-        connect = new Socket[network.length];
-        stream = new InputStream[network.length];
+        connect = new CopyOnWriteArrayList<>();
+        stream = new CopyOnWriteArrayList<>();
         try {
-            for (int i = 0; i < connect.length; i++) {
-                connect[i] = network[i].getSocket();
-                stream[i] = connect[i].getInputStream();
+            for (int i = 0; i < sockets.length; i++) {
+                connect.add(sockets[i]);
+                stream.add(connect.get(i).getInputStream());
             }
         } catch (IOException e) {
             e.printStackTrace();
         }
-    }
-
-
-    public void reInit(NetworkingPart... part){
-        network = part;
-        connect = new Socket[network.length];
-        stream = new InputStream[network.length];
-        try {
-            for (int i = 0; i < connect.length; i++) {
-                connect[i] = network[i].getSocket();
-                stream[i] = connect[i].getInputStream();
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        startReceiver();
+        receiver = new ArrayList<>();
     }
 
     /**
@@ -154,6 +134,7 @@ public class CommunicationTree implements Runnable{
                 }
             }
         }
+        print();
         try {
             throw new CommunicationTreeExeption(command);
         } catch (CommunicationTreeExeption communicationTreeExeption) {
@@ -226,19 +207,45 @@ public class CommunicationTree implements Runnable{
         }
     }
 
+    public void addConnection(Socket socket){
+        connect.add(socket);
+        try {
+            stream.add(socket.getInputStream());
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        Thread th = new Thread(){
+            @Override
+            public void run() {
+                while (executing){
+                    try {
+                        String command = readCommand(socket);
+                        if (!command.equals("")) {
+                            Task task = createTask(socket, command);
+                            tasks.add(task);
+                        }
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        };
+        th.start();
+        receiver.add(th);
+    }
+
     /**
      * Startet den Datenempfang von jedem verbundenen Netzwerkteilnehmer.
      */
     private void startReceiver(){
-        receiver = new Thread[network.length];
-        for (int i = 0; i < receiver.length; i++) {
-            final NetworkingPart networks = network[i];
-            receiver[i] = new Thread(() -> {
+        for (int i = 0; i < connect.size(); i++) {
+            final int index = i;
+            Thread thread = new Thread(() -> {
                 while (executing){
                     try {
-                        String command = readCommand(networks);
+                        String command = readCommand(connect.get(index));
                         if (!command.equals("")) {
-                            Task task = createTask(networks, command);
+                            Task task = createTask(connect.get(index), command);
                             tasks.add(task);
                         }
                     } catch (IOException e) {
@@ -246,7 +253,8 @@ public class CommunicationTree implements Runnable{
                     }
                 }
             });
-            receiver[i].start();
+            thread.start();
+            receiver.add(thread);
         }
     }
 
@@ -255,7 +263,7 @@ public class CommunicationTree implements Runnable{
      * Startet das Datenempfangen und die Datenverarbeitung.
      */
     public void start(){
-        startReceiver();
+        //startReceiver();
         executer = new Thread(this);
         executer.start();
     }
@@ -281,15 +289,14 @@ public class CommunicationTree implements Runnable{
      * @return
      * @throws IOException
      */
-    private String readCommand(NetworkingPart part) throws IOException{
+    private String readCommand(Socket part) throws IOException{
 
         StringBuilder sb = new StringBuilder();
-        InputStream stream = part.getSocket().getInputStream();
+        InputStream stream = part.getInputStream();
         byte i;
         while ((i = (byte) stream.read()) != -1){
             sb.append((char)i);
         }
-
        return sb.toString();
     }
 
@@ -299,7 +306,7 @@ public class CommunicationTree implements Runnable{
      * @return
      * @throws IOException
      */
-    private byte[] readContent(NetworkingPart part, int len) throws IOException{
+    private byte[] readContent(Socket part, int len) throws IOException{
         if (len == 0){
             return null;
         }
@@ -307,7 +314,7 @@ public class CommunicationTree implements Runnable{
         byte[] bytes = new byte[len];
         byte i;
         int index = 0;
-        InputStream stream = part.getSocket().getInputStream();
+        InputStream stream = part.getInputStream();
         while ((i = (byte) stream.read()) != -1){
             //bytes.add(i);
             bytes[index] = i;
@@ -324,8 +331,8 @@ public class CommunicationTree implements Runnable{
      * @return
      * @throws IOException
      */
-    private Task createTask(NetworkingPart part, String str) throws IOException{
-        String[] parts = str.split(sepatator);
+    private Task createTask(Socket part, String str) throws IOException{
+        String[] parts = str.split(":");
         String command = parts[0];
         int len = Integer.parseInt(parts[1]);
         byte[] bytes = readContent(part, len);
@@ -364,6 +371,15 @@ public class CommunicationTree implements Runnable{
         return node;
     }
 
+
+    public void print(){
+
+        for (Node node : nodes){
+            System.out.print(node.getReference() + ", ");
+        }
+
+        System.out.println();
+    }
 
     /**
      * Referenziert das Attribut <code>content</code> auf den übergebenen Parameter <code>c</code>.
@@ -420,7 +436,7 @@ public class CommunicationTree implements Runnable{
          * Implementiert die Verwendung der übergebenen Parameter Bytes.
          * @param data
          */
-        void content(byte[] data);
+        void content(byte[] data) ;
     }
 
 

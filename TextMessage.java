@@ -1,3 +1,5 @@
+package DatabaseChat;
+
 import javafx.geometry.Bounds;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;

@@ -1,3 +1,5 @@
+package DatabaseChat;
+
 import java.net.Socket;
 
 /**

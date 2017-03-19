@@ -1,3 +1,5 @@
+package DatabaseChat;
+
 import javafx.scene.control.TextField;
 import javafx.scene.input.KeyCode;
 import javafx.scene.layout.VBox;
@@ -13,7 +15,7 @@ public class ChatPane extends VBox{
     private ChatHeader header;
     private Profile profile;
 
-    public ChatPane(Profile profile) {
+    public ChatPane(Profile profile, Chat.SendEvent ev) {
         this.profile = profile;
 
         timeline = new TimelinePane();
@@ -25,6 +27,7 @@ public class ChatPane extends VBox{
         input.setOnKeyPressed(event -> {
             if (event.getCode().equals(KeyCode.ENTER)){
                 getTimeline().addMessage(TextMessage.ME, input.getText());
+                ev.send(input.getText());
                 input.clear();
             }
         });
@@ -32,6 +35,7 @@ public class ChatPane extends VBox{
         header = new ChatHeader(profile.getName(), Utils.HEIGHT * 0.3 - input.getBoundsInLocal().getHeight());
         getChildren().addAll(header, timeline, input);
     }
+
 
     public TimelinePane getTimeline() {
         return timeline;
