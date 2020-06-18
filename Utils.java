@@ -1,3 +1,5 @@
+package DatabaseChat;
+
 import javafx.stage.Screen;
 
 /**

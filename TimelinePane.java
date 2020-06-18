@@ -1,3 +1,6 @@
+package DatabaseChat;
+
+import javafx.application.Platform;
 import javafx.scene.layout.Background;
 import javafx.scene.layout.BackgroundFill;
 import javafx.scene.layout.VBox;
@@ -22,10 +25,12 @@ public class TimelinePane extends TransparentScrollPane {
 
     public void addMessage(int type, String msg){
         TextMessage tmsg = new TextMessage(type, msg);
-        timeline.getChildren().add(tmsg);
-        layout();
-        if (timeline.getHeight() > Utils.HEIGHT * 0.8)
-            setVvalue(1.0);
+        Platform.runLater(()->{
+            timeline.getChildren().add(tmsg);
+            layout();
+            if (timeline.getHeight() > Utils.HEIGHT * 0.8)
+                setVvalue(1.0);
+        });
     }
 
 }
